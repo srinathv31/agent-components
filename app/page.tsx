@@ -31,6 +31,10 @@ import {
   ToolOutput,
 } from "@/components/ai-elements/tool";
 import {
+  ToolsSidebar,
+  ToolsSidebarEmptyState,
+} from "@/components/ai-elements/tools-sidebar";
+import {
   ModelSelector,
   ModelSelectorTrigger,
   ModelSelectorContent,
@@ -46,7 +50,8 @@ import {
 import { Suggestions, Suggestion } from "@/components/ai-elements/suggestion";
 import { Loader } from "@/components/ai-elements/loader";
 import { Button } from "@/components/ui/button";
-import { ChevronDownIcon, SparklesIcon, HandIcon } from "lucide-react";
+import { Badge } from "@/components/ui/badge";
+import { ChevronDownIcon, SparklesIcon, WrenchIcon } from "lucide-react";
 import { ModeToggle } from "@/components/dark-mode-toggle";
 
 const ONBOARDING_SUGGESTIONS = [
@@ -197,9 +202,19 @@ function ChatMessages({
   );
 }
 
+type ToolData = {
+  id: string;
+  toolName: string;
+  state: ToolUIPart["state"];
+  input?: unknown;
+  output?: unknown;
+  errorText?: string;
+};
+
 function OnboardingChat() {
   const { selectedModel, setSelectedModel } = useModel();
   const [modelSelectorOpen, setModelSelectorOpen] = useState(false);
+  const [isSidebarOpen, setIsSidebarOpen] = useState(false);
 
   const transport = useMemo(
     () => new DefaultChatTransport({ api: "/api/chat" }),
@@ -207,6 +222,27 @@ function OnboardingChat() {
   );
 
   const { messages, status, sendMessage } = useChat({ transport });
+
+  // Extract tools data from messages for the sidebar
+  const toolsData = useMemo(() => {
+    const tools: ToolData[] = [];
+    messages.forEach((message, msgIdx) => {
+      message.parts.forEach((part, partIdx) => {
+        if (part.type.startsWith("tool-")) {
+          const toolPart = part as ToolUIPart;
+          tools.push({
+            id: `${msgIdx}-${partIdx}`,
+            toolName: toolPart.type.replace("tool-", ""),
+            state: toolPart.state,
+            input: "input" in toolPart ? toolPart.input : undefined,
+            output: "output" in toolPart ? toolPart.output : undefined,
+            errorText: "errorText" in toolPart ? toolPart.errorText : undefined,
+          });
+        }
+      });
+    });
+    return tools;
+  }, [messages]);
 
   const openaiModels = getModelsByProvider("openai");
   const googleModels = getModelsByProvider("google");
@@ -314,54 +350,110 @@ function OnboardingChat() {
             </ModelSelectorContent>
           </ModelSelector>
 
+          <Button
+            variant="outline"
+            size="sm"
+            className="gap-2"
+            onClick={() => setIsSidebarOpen(!isSidebarOpen)}
+            aria-label="Toggle tools panel"
+          >
+            <WrenchIcon className="size-4" />
+            <span className="hidden sm:inline">Tools</span>
+            {toolsData.length > 0 && (
+              <Badge
+                variant="secondary"
+                className="rounded-full px-1.5 text-xs"
+              >
+                {toolsData.length}
+              </Badge>
+            )}
+          </Button>
+
           <ModeToggle />
         </div>
       </header>
 
-      {/* Main Content */}
-      <Conversation className="flex-1">
-        {hasMessages ? (
-          <ChatMessages messages={messages} status={status} />
-        ) : (
-          <HeroWelcome onSuggestionClick={handleSuggestionClick} />
-        )}
-        <ConversationScrollButton />
-      </Conversation>
+      {/* Main Content Area with Sidebar */}
+      <div className="flex flex-1 overflow-hidden">
+        {/* Chat Area */}
+        <main className="flex flex-1 flex-col overflow-hidden">
+          <Conversation className="flex-1">
+            {hasMessages ? (
+              <ChatMessages messages={messages} status={status} />
+            ) : (
+              <HeroWelcome onSuggestionClick={handleSuggestionClick} />
+            )}
+            <ConversationScrollButton />
+          </Conversation>
 
-      {/* Input Area */}
-      <div className="shrink-0 border-t bg-linear-to-t from-background to-background/80 p-4">
-        <div className="mx-auto max-w-3xl">
-          {/* Show suggestions when there are messages */}
-          {hasMessages && (
-            <div className="mb-3">
-              <Suggestions>
-                {ONBOARDING_SUGGESTIONS.slice(0, 3).map((suggestion) => (
-                  <Suggestion
-                    key={suggestion}
-                    suggestion={suggestion}
-                    onClick={handleSuggestionClick}
-                    className="text-xs"
+          {/* Input Area */}
+          <div className="shrink-0 border-t bg-linear-to-t from-background to-background/80 p-4">
+            <div className="mx-auto max-w-3xl">
+              {/* Show suggestions when there are messages */}
+              {hasMessages && (
+                <div className="mb-3">
+                  <Suggestions>
+                    {ONBOARDING_SUGGESTIONS.slice(0, 3).map((suggestion) => (
+                      <Suggestion
+                        key={suggestion}
+                        suggestion={suggestion}
+                        onClick={handleSuggestionClick}
+                        className="text-xs"
+                      />
+                    ))}
+                  </Suggestions>
+                </div>
+              )}
+
+              <PromptInput onSubmit={handleSubmit}>
+                <PromptInputFooter>
+                  <PromptInputTextarea
+                    placeholder="Ask me anything about getting started..."
+                    disabled={status === "streaming" || status === "submitted"}
                   />
-                ))}
-              </Suggestions>
+                  <PromptInputSubmit
+                    status={
+                      status as "streaming" | "submitted" | "error" | undefined
+                    }
+                    disabled={status === "streaming" || status === "submitted"}
+                  />
+                </PromptInputFooter>
+              </PromptInput>
             </div>
-          )}
+          </div>
+        </main>
 
-          <PromptInput onSubmit={handleSubmit}>
-            <PromptInputFooter>
-              <PromptInputTextarea
-                placeholder="Ask me anything about getting started..."
-                disabled={status === "streaming" || status === "submitted"}
-              />
-              <PromptInputSubmit
-                status={
-                  status as "streaming" | "submitted" | "error" | undefined
-                }
-                disabled={status === "streaming" || status === "submitted"}
-              />
-            </PromptInputFooter>
-          </PromptInput>
-        </div>
+        {/* Tools Sidebar */}
+        <ToolsSidebar
+          open={isSidebarOpen}
+          onOpenChange={setIsSidebarOpen}
+          toolCount={toolsData.length}
+        >
+          {toolsData.length === 0 ? (
+            <ToolsSidebarEmptyState />
+          ) : (
+            toolsData.map((tool, index) => (
+              <Tool key={tool.id} defaultOpen={index === toolsData.length - 1}>
+                <ToolHeader
+                  title={tool.toolName}
+                  type={`tool-${tool.toolName}`}
+                  state={tool.state}
+                />
+                <ToolContent>
+                  {tool.input !== undefined ? (
+                    <ToolInput input={tool.input as ToolUIPart["input"]} />
+                  ) : null}
+                  {tool.output !== undefined || tool.errorText !== undefined ? (
+                    <ToolOutput
+                      output={tool.output as ToolUIPart["output"]}
+                      errorText={tool.errorText as ToolUIPart["errorText"]}
+                    />
+                  ) : null}
+                </ToolContent>
+              </Tool>
+            ))
+          )}
+        </ToolsSidebar>
       </div>
     </div>
   );

@@ -23,16 +23,16 @@ export const AVAILABLE_MODELS: ModelConfig[] = [
   },
   // Google models
   {
-    id: "gemini-2.5-flash",
-    name: "Gemini 2.5 Flash",
+    id: "gemini-3-flash-preview",
+    name: "Gemini 3 Flash",
     provider: "google",
     description: "Fast multimodal model",
   },
   {
-    id: "gemini-1.5-pro",
-    name: "Gemini 1.5 Pro",
+    id: "gemini-2.5-flash",
+    name: "Gemini 2.5 Flash",
     provider: "google",
-    description: "Long context model",
+    description: "Fast multimodal model",
   },
 ];
 
